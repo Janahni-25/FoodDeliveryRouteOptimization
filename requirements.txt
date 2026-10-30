@@ -1,0 +1,9 @@
+streamlit>=1.40
+pandas
+numpy
+matplotlib
+folium
+scikit-learn
+ortools
+# optional: real road distances (feature 12)
+osmnx
