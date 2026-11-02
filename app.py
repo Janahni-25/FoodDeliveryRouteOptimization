@@ -19,7 +19,7 @@ from planners import HAS_ORTOOLS
 
 st.set_page_config(page_title="TABPC+ Food Delivery Routing", layout="wide")
 
-st.markdown("<style>.stApp, [data-testid=stSidebar] > div {background:#051d0d}</style>", unsafe_allow_html=True)
+st.markdown("<style>.stApp, [data-testid=stSidebar] > div {background:#0c180c}</style>", unsafe_allow_html=True)
 
 PALETTE = ["#92f2ff", "#f85d5d", "#082a14", "#c081fb", "#ea580c", "#e9ff91", "#ffdd93", "#f7a3c9"]
 PRIO_COLOR = {"express": "#f85d5d", "normal": "#92f2ff", "scheduled": "#6A7E7F"}
