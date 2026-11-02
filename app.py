@@ -19,8 +19,10 @@ from planners import HAS_ORTOOLS
 
 st.set_page_config(page_title="TABPC+ Food Delivery Routing", layout="wide")
 
-PALETTE = ["#2563eb", "#dc2626", "#16a34a", "#9333ea", "#ea580c", "#0891b2", "#ca8a04", "#db2777"]
-PRIO_COLOR = {"express": "#dc2626", "normal": "#2563eb", "scheduled": "#6b7280"}
+st.markdown("<style>.stApp, [data-testid=stSidebar] > div {background:#051d0d}</style>", unsafe_allow_html=True)
+
+PALETTE = ["#92f2ff", "#f85d5d", "#082a14", "#c081fb", "#ea580c", "#e9ff91", "#ffdd93", "#f7a3c9"]
+PRIO_COLOR = {"express": "#f85d5d", "normal": "#92f2ff", "scheduled": "#6A7E7F"}
 
 # paper dataset sizes: (orders, riders, batch size, rider limit, span hours)
 PAPER = {
@@ -45,7 +47,6 @@ def apply_preset():
 # =============================================================================== sidebar
 with st.sidebar:
     st.title("TABPC+")
-    st.caption("Time-aware batching & precedence-constrained routing")
     st.header("World")
     st.selectbox("Dataset preset", ["Custom"] + list(PAPER), key="preset_sel", on_change=apply_preset)
     st.slider("Orders", 10, 300, key="n_orders", step=5)
@@ -67,7 +68,6 @@ with st.sidebar:
         lon = st.number_input("Centre longitude", value=76.9558, format="%.4f")
         rad = st.number_input("Radius (m)", value=4000, step=500)
         road_args = (float(lat), float(lon), int(rad))
-        st.caption("Needs `pip install osmnx` and internet. Default centre: Coimbatore.")
 
     st.header("TABPC+ objective")
     alpha = st.number_input("alpha: distance (per km)", 0.0, 20.0, 1.0, 0.1)
@@ -167,7 +167,7 @@ def build_map(sim, batch_sel, dm):
                 txt = (f"#{k} DROP order {o.id} ({o.priority}) at {fmt_time(s['arrive'])}, "
                        f"deadline {fmt_time(o.deadline)}" + (f", LATE {late:.0f} min" if late else ""))
                 folium.CircleMarker(ll(s["pos"]), radius=6, color=PRIO_COLOR[o.priority],
-                                    fill=True, fill_color="#dc2626" if late else col,
+                                    fill=True, fill_color="#f85d5d" if late else col,
                                     fill_opacity=0.9, tooltip=txt).add_to(m)
     return m
 
@@ -208,8 +208,7 @@ def pretty(df):
 
 # =============================================================================== tabs
 st.title("Time-Aware Batching and Precedence-Constrained Routing (TABPC+)")
-tabs = st.tabs(["Run & map", "Compare algorithms", "Sensitivity", "Ablation", "ETA predictor",
-                "Features"])
+tabs = st.tabs(["Run & map", "Compare algorithms", "Sensitivity", "Ablation", "ETA predictor"])
 
 # ------------------------------------------------------------------ Run & map
 with tabs[0]:
@@ -217,8 +216,6 @@ with tabs[0]:
     algo_name = c1.selectbox("Algorithm", available_algos())
     seed = c2.number_input("Seed", 0, 9999, key="seed")
     run_clicked = c3.button("Run simulation", type="primary", use_container_width=True)
-    if not HAS_ORTOOLS:
-        st.info("OR-Tools is not installed, so the GLS baseline is hidden. `pip install ortools`")
     if run_clicked:
         try:
             with st.spinner("Simulating..."):
@@ -251,8 +248,6 @@ with tabs[0]:
         batches = sorted({p["batch"] for p in sim.all_plans()})
         sel = st.selectbox("Show batch", ["All"] + batches)
         show_html(build_map(sim, sel, st.session_state.sim_dm).get_root().render(), 620)
-        st.caption("Green = restaurants, square = pickup, circle = drop (red fill = late), "
-                   "line colour = rider. Hover for details.")
         with st.expander("Rider fleet and routes"):
             st.dataframe(pd.DataFrame([{"rider": r.id, "vehicle": r.vehicle, "speed km/h": r.speed,
                                         "capacity": r.cap, "trips": len(r.plans),
@@ -279,14 +274,10 @@ with tabs[0]:
 
 # ------------------------------------------------------------------ Compare
 with tabs[1]:
-    st.write("Feature 13: TABPC+ against the original TABPC, Nearest Neighbour, no batching and "
-             "Guided Local Search (OR-Tools), averaged over several seeds on identical orders.")
     cc1, cc2 = st.columns([3, 1])
     chosen = cc1.multiselect("Algorithms", available_algos(), default=[a for a in available_algos()
                                                                      if not a.startswith("GLS")])
     nseeds = cc2.number_input("Seeds", 1, 20, 3, key="cmp_seeds")
-    if "GLS (OR-Tools)" in chosen:
-        st.caption("GLS runs about 1 s of search per batch, so it is the slowest option.")
     if st.button("Run comparison", type="primary"):
         try:
             prog = make_progress()
@@ -299,7 +290,7 @@ with tabs[1]:
         st.dataframe(pretty(mean[KEY_METRICS]).round(2))
         st.pyplot(bar_panel(mean, std, ["distance_km", "late_orders", "avg_delivery_min", "idle_min",
                                         "rider_km_std", "composite"], title="Mean over seeds (error bar = std)"))
-        st.subheader("Cost and CO2 (feature 16)")
+        st.subheader("Cost and CO2")
         if "No batching" in mean.index:
             base = mean.loc["No batching"]
             sav = pd.DataFrame({
@@ -310,7 +301,6 @@ with tabs[1]:
             st.dataframe(sav.round(1))
         else:
             st.dataframe(mean[["co2_kg", "fuel_cost_inr"]].round(1))
-        st.caption("Assumed factors: cycle 0 g/km, scooter 45 g/km and INR 2/km, bike 70 g/km and INR 3/km.")
         with st.expander("All metrics"):
             st.dataframe(pretty(mean).round(2))
         with st.expander("Raw per-seed results"):
@@ -318,7 +308,6 @@ with tabs[1]:
 
 # ------------------------------------------------------------------ Sensitivity
 with tabs[2]:
-    st.write("Feature 14: change one parameter at a time and see its effect on TABPC+.")
     PARAMS = {
         "batch_size": "5,10,20,30", "n_riders": "3,4,5,6,8", "window": "5,10,15,20",
         "rider_limit": "1,2,3,4,5", "beta": "0,1,2,5,10", "gamma": "0,0.1,0.5,1",
@@ -349,8 +338,6 @@ with tabs[2]:
 
 # ------------------------------------------------------------------ Ablation
 with tabs[3]:
-    st.write("Feature 15: switch each added feature off in turn. A higher composite score or more "
-             "late orders than the full method means that feature helps.")
     aseeds = st.number_input("Seeds", 1, 10, 2, key="abl_seeds")
     if st.button("Run ablation", type="primary"):
         try:
@@ -366,9 +353,9 @@ with tabs[3]:
         fig, ax = plt.subplots(figsize=(9, 0.45 * len(mean) + 1))
         comp = mean["composite"]
         ax.barh(range(len(comp)), comp.to_numpy(),
-                color=["#16a34a" if n == "TABPC+ (full)" else ("#6b7280" if n.startswith("Original") else "#2563eb")
+                color=["#082a14" if n == "TABPC+ (full)" else ("#6A7E7F" if n.startswith("Original") else "#92f2ff")
                        for n in comp.index])
-        ax.axvline(full, color="#16a34a", ls="--", lw=1)
+        ax.axvline(full, color="#082a14", ls="--", lw=1)
         ax.set_yticks(range(len(comp)))
         ax.set_yticklabels(comp.index, fontsize=9)
         ax.invert_yaxis()
@@ -376,12 +363,9 @@ with tabs[3]:
         ax.spines[["top", "right"]].set_visible(False)
         fig.tight_layout()
         st.pyplot(fig)
-        st.caption("Composite = distance + 2 x priority-weighted lateness + 0.1 x food age (+ penalty for "
-                   "stranded orders).")
 
 # ------------------------------------------------------------------ ETA
 with tabs[4]:
-    st.write("Feature 17b: train a model on simulated deliveries to predict a customer's delivery time.")
     e1, e2 = st.columns([1, 3])
     eseeds = e1.number_input("Training simulations", 2, 30, 8, key="eta_seeds")
     if e2.button("Generate data and train", type="primary"):
@@ -399,9 +383,9 @@ with tabs[4]:
         mc[2].metric("R2", f"{met['R2']:.2f}")
         mc[3].metric("Model", met["model"].replace("_", " "))
         fig, ax = plt.subplots(figsize=(5.5, 4.5))
-        ax.scatter(hold["delivery_min"], hold["predicted"], s=10, alpha=0.6, color="#2563eb")
+        ax.scatter(hold["delivery_min"], hold["predicted"], s=10, alpha=0.6, color="#92f2ff")
         lim = [0, float(max(hold["delivery_min"].max(), hold["predicted"].max())) * 1.05]
-        ax.plot(lim, lim, color="#dc2626", lw=1)
+        ax.plot(lim, lim, color="#f85d5d", lw=1)
         ax.set_xlabel("Actual delivery time (min)")
         ax.set_ylabel("Predicted (min)")
         ax.spines[["top", "right"]].set_visible(False)
@@ -421,32 +405,3 @@ with tabs[4]:
         x = np.array([[rc, prep, hour, bsz, ro, rank, speed,
                        {"express": 0, "normal": 1, "scheduled": 2}[prio], peak]], float)
         st.metric("Predicted delivery time", f"{float(model.predict(x)[0]):.0f} min")
-
-# ------------------------------------------------------------------ Features
-with tabs[5]:
-    st.markdown("""
-**What TABPC+ adds to the original TABPC (paper)**
-
-| # | Feature | Where |
-|---|---------|-------|
-| 1 | Multi-objective cost: alpha x distance + beta x lateness + gamma x food age, plus freshness limit | sidebar, `model.eval_route` |
-| 2 | Restaurant prep time, rider waits for food, idle time reported | `model.eval_route` |
-| 3 | Priority levels: express / normal / scheduled | sorting and weighted lateness |
-| 4 | Rider fairness (workload spread term, std reported) | `planners.TabpcSolver.fair` |
-| 5 | Simulated annealing improvement phase | `planners.TabpcSolver.anneal` |
-| 6 | Three move families: intra swap, inter-route relocate / exchange, pair-aware shift / best re-insert | `planners.TabpcSolver.propose` |
-| 7 | Dynamic arrivals (lunch/dinner peaks) with adaptive batching window | `simulator.window_now` |
-| 8 | Cancellations and rider breakdown with re-assignment | `simulator.breakdown_event` |
-| 9 | Idle rider repositioning to demand hotspots | `simulator.reposition` |
-| 10 | Heterogeneous riders: cycle / scooter / bike (speed, capacity) | `model.VEHICLES` |
-| 11 | Traffic-aware travel times (12-14h, 19-21h peaks) | `model.traffic_mult` |
-| 12 | Real road distances (OpenStreetMap, optional) | `model.RoadNetwork` |
-| 13 | Baselines: original TABPC, GLS, nearest neighbour, no batching, many metrics, seeds | Compare tab |
-| 14 | Sensitivity analysis | Sensitivity tab |
-| 15 | Ablation study | Ablation tab |
-| 16 | Fuel cost and CO2 estimate | Compare tab |
-| 17 | Map dashboard and customer ETA prediction | Run & map, ETA tabs |
-
-Planner flags (prep, traffic, priority, fleet speeds, ...) change what the **planner knows**. Every
-plan is always executed and scored in the same true world, so the ablation is a fair test.
-""")
