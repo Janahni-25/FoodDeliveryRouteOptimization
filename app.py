@@ -12,8 +12,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from analysis import (ETA_FEATURES, KEY_METRICS, METRIC_LABELS, ablation, compare, eta_dataset,
-                      run_once, sensitivity, train_eta)
+from analysis import KEY_METRICS, METRIC_LABELS, ablation, compare, run_once, sensitivity
 from model import (AlgoConfig, Euclid, PRESET_NAMES, WorldConfig, fmt_time, preset)
 from planners import HAS_ORTOOLS
 
@@ -208,7 +207,7 @@ def pretty(df):
 
 # =============================================================================== tabs
 st.title("Time-Aware Batching and Precedence-Constrained Routing (TABPC+)")
-tabs = st.tabs(["Run & map", "Compare algorithms", "Sensitivity", "Ablation", "ETA predictor"])
+tabs = st.tabs(["Run & map", "Compare algorithms", "Sensitivity", "Ablation"])
 
 # ------------------------------------------------------------------ Run & map
 with tabs[0]:
@@ -364,44 +363,3 @@ with tabs[3]:
         fig.tight_layout()
         st.pyplot(fig)
 
-# ------------------------------------------------------------------ ETA
-with tabs[4]:
-    e1, e2 = st.columns([1, 3])
-    eseeds = e1.number_input("Training simulations", 2, 30, 8, key="eta_seeds")
-    if e2.button("Generate data and train", type="primary"):
-        try:
-            with st.spinner("Simulating and training..."):
-                df = eta_dataset(W, A_PLUS, range(int(eseeds)), get_dm(W))
-                st.session_state.eta = (df,) + train_eta(df)
-        except Exception as e:  # noqa: BLE001
-            st.error(f"Training failed: {e}")
-    if "eta" in st.session_state:
-        df, model, met, hold = st.session_state.eta
-        mc = st.columns(4)
-        mc[0].metric("MAE", f"{met['MAE (min)']:.1f} min")
-        mc[1].metric("RMSE", f"{met['RMSE (min)']:.1f} min")
-        mc[2].metric("R2", f"{met['R2']:.2f}")
-        mc[3].metric("Model", met["model"].replace("_", " "))
-        fig, ax = plt.subplots(figsize=(5.5, 4.5))
-        ax.scatter(hold["delivery_min"], hold["predicted"], s=10, alpha=0.6, color="#92f2ff")
-        lim = [0, float(max(hold["delivery_min"].max(), hold["predicted"].max())) * 1.05]
-        ax.plot(lim, lim, color="#f85d5d", lw=1)
-        ax.set_xlabel("Actual delivery time (min)")
-        ax.set_ylabel("Predicted (min)")
-        ax.spines[["top", "right"]].set_visible(False)
-        st.pyplot(fig)
-        st.subheader("Predict for a new order")
-        p1, p2, p3 = st.columns(3)
-        rc = p1.slider("Restaurant to customer (km)", 0.2, 8.0, 2.0, 0.1)
-        prep = p1.slider("Prep time (min)", 3, 25, 10)
-        hour = p2.slider("Hour of order", 6.0, 23.0, 13.0, 0.25)
-        bsz = p2.slider("Batch size", 1, 30, 8)
-        ro = p3.slider("Orders on the route", 1, 6, 3)
-        rank = p3.slider("Position of this drop on the route", 0, 5, 1)
-        veh = st.selectbox("Vehicle", ["cycle (12 km/h)", "scooter (22 km/h)", "bike (30 km/h)"], index=1)
-        prio = st.selectbox("Priority", ["express", "normal", "scheduled"], index=1)
-        speed = {"cycle": 12.0, "scooter": 22.0, "bike": 30.0}[veh.split()[0]]
-        peak = 1.0 if (12 <= hour < 14 or 19 <= hour < 21) else 0.0
-        x = np.array([[rc, prep, hour, bsz, ro, rank, speed,
-                       {"express": 0, "normal": 1, "scheduled": 2}[prio], peak]], float)
-        st.metric("Predicted delivery time", f"{float(model.predict(x)[0]):.0f} min")
